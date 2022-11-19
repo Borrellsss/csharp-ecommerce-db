@@ -21,13 +21,13 @@ EcommerceDbContext db = new EcommerceDbContext();
 
 List<Product> products = db.Products.ToList();
 
-if(products.Count() < 10)
+if (products.Count() < 10)
 {
     for (int i = 0; i < 10; i++)
     {
         Product product = new Product();
-        product.Name = $"Prodotto{i}";
-        product.Description = $"Incredibile nuovo Prodotto{i}";
+        product.Name = $"Prodotto{i + 1}";
+        product.Description = $"Incredibile nuovo Prodotto{i + 1}";
         product.Price = new Random().Next(10, 20 + 1);
         db.Products.Add(product);
         db.SaveChanges();
@@ -142,10 +142,10 @@ void CustomerActions()
                 Console.Write("Inserisci numero pacchetto: ");
                 orderId = Convert.ToInt16(Console.ReadLine());
 
-                Order order = db.Orders.Find(orderId);
+                Order order = db.Orders.Where(o => o.Id == orderId).Include("Products").First();
 
                 order.PrintProductsList();
-
+                
                 bool customerOrderConfirmRequest = true;
                 while (customerOrderConfirmRequest)
                 {
@@ -157,42 +157,49 @@ void CustomerActions()
                     switch (customerOrderConfirmResponse)
                     {
                         case "1":
-                            int randomPaymentResult = new Random().Next(0, 1 + 1);
-
-                            if(randomPaymentResult == 1)
+                            if (order.Status)
                             {
-                                Order orderToUpdate = db.Orders.Find(orderId);
-                                orderToUpdate.CustomerId = 1;
-                                orderToUpdate.Status = false;
+                                int randomPaymentResult = new Random().Next(0, (1 + 1));
 
-                                Payment payment = new Payment();
-                                payment.OrderId = orderToUpdate.Id;
-                                payment.Date = DateTime.Now;
-                                payment.Amount = orderToUpdate.Amount;
-                                payment.Status = true;
+                                if (randomPaymentResult == 1)
+                                {
+                                    Order orderToUpdate = db.Orders.Find(orderId);
+                                    orderToUpdate.CustomerId = 1;
+                                    orderToUpdate.Status = false;
 
-                                db.Add(payment);
-                                db.SaveChanges();
+                                    Payment payment = new Payment();
+                                    payment.OrderId = orderToUpdate.Id;
+                                    payment.Date = DateTime.Now;
+                                    payment.Amount = orderToUpdate.Amount;
+                                    payment.Status = true;
 
-                                Console.WriteLine("Ordine effettuato con successo!");
+                                    db.Add(payment);
+                                    db.SaveChanges();
+
+                                    Console.WriteLine("Ordine effettuato con successo!");
+                                }
+                                else
+                                {
+                                    Order orderToUpdate = db.Orders.Find(orderId);
+
+                                    Payment payment = new Payment();
+                                    payment.OrderId = orderToUpdate.Id;
+                                    payment.Date = DateTime.Now;
+                                    payment.Amount = 0;
+                                    payment.Status = false;
+
+                                    db.Add(payment);
+                                    db.SaveChanges();
+
+                                    Console.WriteLine("Si è verificato un errore durante la transazione.");
+                                }
+                                customerOrderConfirmRequest = false;
                             }
                             else
                             {
-                                Order orderToUpdate = db.Orders.Find(orderId);
-
-                                Payment payment = new Payment();
-                                payment.OrderId = orderToUpdate.Id;
-                                payment.Date = DateTime.Now;
-                                payment.Amount = 0;
-                                payment.Status = false;
-
-                                db.Add(payment);
-                                db.SaveChanges();
-
-                                Console.WriteLine("Si è verificato un errore durante la transazione.");
+                                Console.WriteLine("Il pacchetto è momentaneamente terminato, prova a controllare più tardi.");
                             }
                             customerOrderConfirmRequest = false;
-                            CustomerContinue();
                             break;
 
                         case "2":
@@ -228,32 +235,33 @@ void EmployeeActions()
         Console.WriteLine("[2]: cerca pacchetto.");
         Console.WriteLine("[3]: modifica pacchetto.");
         Console.WriteLine("[4]: rimuovi pacchetto.");
+        Console.WriteLine("[5]: indietro.");
 
         string emplyeeResponse = Console.ReadLine();
         switch (emplyeeResponse)
         {
             case "1":
                 CreateOrder();
-                StopProgram();
                 EmployeeContinue();
                 break;
 
             case "2":
                 ReadOrder();
-                StopProgram();
                 EmployeeContinue();
                 break;
 
             case "3":
                 UpdateOrder();
-                StopProgram();
                 EmployeeContinue();
                 break;
 
             case "4":
                 DeleteOrder();
-                StopProgram();
                 EmployeeContinue();
+                break;
+
+            case "5":
+                emplyeeRequest = false;
                 break;
 
             default:
@@ -294,7 +302,9 @@ void CreateOrder()
 
     List<int> productsIdToAdd = new List<int>();
 
-    for(int i = 0; i < numberOfProducts; i++)
+    int counter = 0;
+
+    while (counter < numberOfProducts)
     {
         Console.Write($"inserisci id prodotto: ");
         int productId;
@@ -303,6 +313,7 @@ void CreateOrder()
         {
             productId = Convert.ToInt16(Console.ReadLine());
             productsIdToAdd.Add(productId);
+            counter++;
         }
         catch (FormatException ex)
         {
@@ -341,13 +352,14 @@ void ReadOrder()
         Console.Write("Id pacchetto: ");
         orderId = Convert.ToInt16(Console.ReadLine());
 
-        //List<Product> order = db.Orders.Include(p => p.Products).ToList();
+        Order order = db.Orders.Where(o => o.Id == orderId).Include("Products").First();
 
-        //Console.WriteLine(order.ToString());
+        Console.WriteLine(order.ToString());
 
-        //Console.WriteLine("Lista prodotti presenti nel pacchetto: ");
+        Console.WriteLine("Lista prodotti presenti nel pacchetto: ");
 
-        //List<Product> students = 
+        order.PrintProductsList();
+
     }
     catch (FormatException ex)
     {
@@ -365,7 +377,7 @@ void UpdateOrder()
         Console.Write("Id pacchetto: ");
         orderId = Convert.ToInt16(Console.ReadLine());
 
-        Order order = db.Orders.Find(orderId);
+        Order order = db.Orders.Where(o => o.Id == orderId).Include("Products").First();
 
         Console.WriteLine(order.ToString());
 
@@ -373,7 +385,66 @@ void UpdateOrder()
 
         order.PrintProductsList();
 
-        // da continuare
+        Console.WriteLine("Con quanti e quali prodotti vuoi sostituire quelli presenti nel pacchetto?");
+
+        order.Products.Clear();
+
+        int numberOfProducts = 0;
+        try
+        {
+            Console.Write("Numero Prodotti: ");
+            numberOfProducts = Convert.ToInt16(Console.ReadLine());
+        }
+        catch (FormatException ex)
+        {
+            Console.WriteLine("Non puoi inserire un numero in lettere!");
+        }
+
+        List<Product> products = db.Products.ToList();
+
+        if (products.Count() > 0)
+        {
+            Console.WriteLine("---------------------------------------------------");
+            for (int i = 0; i < products.Count(); i++)
+            {
+                Product product = products[i];
+
+                Console.WriteLine($"[{i + 1}]: {product.ToString()}");
+                Console.WriteLine("---------------------------------------------------");
+            }
+        }
+
+        List<int> productsIdToAdd = new List<int>();
+
+        int counter = 0;
+
+        while (counter < numberOfProducts)
+        {
+            Console.Write($"inserisci id prodotto: ");
+            int productId;
+
+            try
+            {
+                productId = Convert.ToInt16(Console.ReadLine());
+                productsIdToAdd.Add(productId);
+                counter++;
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine("Non puoi inserire un numero in lettere!");
+            }
+        }
+
+        foreach (int id in productsIdToAdd)
+        {
+            Product product = db.Products.Find(id);
+            order.Products.Add(product);
+        }
+
+        order.Amount = order.CalcTotalAmount();
+        order.Status = true;
+
+        db.SaveChanges();
 
         Console.WriteLine("Pacchetto modificato correttamente.");
     }
